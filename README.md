@@ -38,5 +38,6 @@ public class MyClass : Monobehaviour
     pathfindingPath = AStar.CreateNewPath(); //Some function that returns an array of points for A* pathfinding
     result(NodeResult.Succeeded);
   }
+}
 ```
 This will simply keep running (via the RepeaterNode), then in sequence run a set of actions until it receives a failed result. If CheckIfPathNull returns failed, it wont move onto CreateNewPath. 
