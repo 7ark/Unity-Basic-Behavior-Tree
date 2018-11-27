@@ -13,8 +13,15 @@ public class BehaviorTree
 
     public BehaviorTree(BehaviorNode startingNode)
     {
-        tree = startingNode;
-        Run();
+        if (startingNode == null)
+        {
+            Running = false;
+        }
+        else
+        {
+            tree = startingNode;
+            Run();
+        }
     }
 
     public void Run()
@@ -27,10 +34,10 @@ public class BehaviorTree
     /// </summary>
     public void Tick()
     {
-        if(Running)
+        if (Running)
         {
             NodeResult result = tree.ConductAction();
-            if(result == NodeResult.Running)
+            if (result == NodeResult.Running)
             {
                 return;
             }
@@ -42,8 +49,6 @@ public class BehaviorTree
 
 public abstract class BehaviorNode
 {
-    protected float runTime = 0;
-    
     public List<BehaviorNode> children = new List<BehaviorNode>();
 
     public abstract NodeResult ConductAction();
@@ -73,12 +78,12 @@ public class RepeaterNode : BehaviorNode
     {
         for (int i = 0; i < children.Count; i++)
         {
-            switch(children[i].ConductAction())
+            switch (children[i].ConductAction())
             {
                 case NodeResult.Running:
                     return NodeResult.Running;
                 case NodeResult.Failed:
-                    if(StopOnFailure)
+                    if (StopOnFailure)
                     {
                         return NodeResult.Failed;
                     }
@@ -86,7 +91,7 @@ public class RepeaterNode : BehaviorNode
             }
         }
 
-        if(!RunForever)
+        if (!RunForever)
         {
             timesRun++;
             if (timesRun >= StepsToRun)
@@ -112,14 +117,12 @@ public class SequenceNode : BehaviorNode
     {
         for (int i = 0; i < children.Count; i++)
         {
-            switch(children[i].ConductAction())
+            switch (children[i].ConductAction())
             {
                 case NodeResult.Running:
                     return NodeResult.Running;
                 case NodeResult.Failed:
                     return NodeResult.Failed;
-                case NodeResult.Succeeded:
-                    break;
             }
         }
         return NodeResult.Succeeded;
@@ -145,20 +148,25 @@ public class AnyNode : BehaviorNode
                     return NodeResult.Running;
                 case NodeResult.Succeeded:
                     return NodeResult.Succeeded;
-                case NodeResult.Failed:
-                    break;
             }
         }
         return NodeResult.Failed;
     }
 }
 
-public class RunNode : BehaviorNode
+public abstract class DelayNode : BehaviorNode
+{
+    protected NodeResult finalResult = NodeResult.Running;
+    public bool IsRunning { get; protected set; } = false;
+
+    public DelayNode(BehaviorNode[] nodes) : base(nodes)
+    {
+    }
+}
+public class RunNode : DelayNode
 {
     public Action<Action<NodeResult>> behavior;
-    bool running = false;
     bool finishedRunning = false;
-    NodeResult finalResult = NodeResult.Running;
 
     public RunNode(Action<Action<NodeResult>> action, params BehaviorNode[] nodes) : base(nodes)
     {
@@ -167,21 +175,22 @@ public class RunNode : BehaviorNode
 
     public override NodeResult ConductAction()
     {
-        if (running)
+        if (IsRunning)
         {
-            if(finishedRunning)
+            if (finishedRunning)
             {
-                running = false;
+                IsRunning = false;
+                finishedRunning = false;
                 return finalResult;
             }
             return NodeResult.Running;
         }
         else
         {
-            running = true;
+            IsRunning = true;
             finishedRunning = false;
             behavior(DoneRunning);
-            if(finishedRunning)
+            if (finishedRunning)
             {
                 return finalResult;
             }
@@ -196,10 +205,10 @@ public class RunNode : BehaviorNode
     }
 }
 
-public class WaitNode : BehaviorNode
+public class WaitNode : DelayNode
 {
     float timer = 0;
-    bool running = false;
+    float runTime = 0;
 
     public WaitNode(float timeToRun, params BehaviorNode[] nodes) : base(nodes)
     {
@@ -208,20 +217,51 @@ public class WaitNode : BehaviorNode
 
     public override NodeResult ConductAction()
     {
-        if (running)
+        if (IsRunning)
         {
             timer -= Time.deltaTime;
-            if(timer <= 0)
+            if (timer <= 0)
             {
-                running = false;
+                IsRunning = false;
                 return NodeResult.Succeeded;
             }
             return NodeResult.Running;
         }
         else
         {
-            running = true;
+            IsRunning = true;
             timer = runTime;
+            return NodeResult.Running;
+        }
+    }
+}
+
+public class WaitDynamicNode : DelayNode
+{
+    protected Func<float> runTime = null;
+    float timer = 0;
+
+    public WaitDynamicNode(Func<float> timeToRun, params BehaviorNode[] nodes) : base(nodes)
+    {
+        runTime = timeToRun;
+    }
+
+    public override NodeResult ConductAction()
+    {
+        if (IsRunning)
+        {
+            timer -= Time.deltaTime;
+            if (timer <= 0)
+            {
+                IsRunning = false;
+                return NodeResult.Succeeded;
+            }
+            return NodeResult.Running;
+        }
+        else
+        {
+            IsRunning = true;
+            timer = runTime();
             return NodeResult.Running;
         }
     }
